@@ -42,8 +42,14 @@ class MetricServiceProvider extends ServiceProvider
         // Add "Post Views" option to Gutenberg query options
         add_filter('jankx/gutenberg/query-options/order-by', [$this, 'addPostViewsOrderByOption']);
 
+        // Add "Most Views" query preset to the dynamic data layout block
+        add_filter('jankx/gutenberg/query-options/query-presets', [$this, 'addPostViewsQueryPreset']);
+
         // Filter WP_Query to handle post_views orderby
         add_action('pre_get_posts', [$this, 'handlePostViewsOrderBy'], 10);
+
+        // Build query attributes for the "Most Views" preset
+        add_filter('jankx/dynamic-data-layout/query-builder', [$this, 'buildMostViewsPreset'], 10, 2);
 
         // Register Trend Posts block
         add_action('jankx/gutenberg/register-blocks', [$this, 'registerTrendPostsBlock']);
@@ -82,6 +88,43 @@ class MetricServiceProvider extends ServiceProvider
     }
 
     /**
+     * Add "Most Views" query preset to the dynamic data layout block.
+     *
+     * @param array $presets Existing query preset options
+     * @return array Modified query preset options
+     */
+    public function addPostViewsQueryPreset(array $presets): array
+    {
+        $presets[] = [
+            'value' => 'most_views',
+            'label' => __('Most Views (Xem nhiều nhất)', 'jankx'),
+            'postType' => null,
+            'help' => __('Display posts sorted by the most post views.', 'jankx'),
+        ];
+
+        return $presets;
+    }
+
+    /**
+     * Build query attributes for the "Most Views" preset.
+     *
+     * @param array $attributes Block attributes
+     * @param string $preset Query preset name
+     * @return array Modified attributes
+     */
+    public function buildMostViewsPreset(array $attributes, string $preset): array
+    {
+        if ($preset !== 'most_views') {
+            return $attributes;
+        }
+
+        $attributes['orderBy'] = 'post_views';
+        $attributes['order'] = 'DESC';
+
+        return $attributes;
+    }
+
+    /**
      * Handle post views orderby in WP_Query
      *
      * @param \WP_Query $query The WP_Query instance
@@ -89,8 +132,13 @@ class MetricServiceProvider extends ServiceProvider
      */
     public function handlePostViewsOrderBy(\WP_Query $query): void
     {
-        // Only modify if orderby is post_views
-        if ($query->get('orderby') !== 'post_views') {
+        $orderby = $query->get('orderby');
+
+        // Match both string (`post_views`) and array (`['post_views' => 'DESC', ...]`) orderby forms
+        $isPostViews = $orderby === 'post_views'
+            || (is_array($orderby) && isset($orderby['post_views']));
+
+        if (!$isPostViews) {
             return;
         }
 
